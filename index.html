@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>La carte des faits</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Merriweather+Sans:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;width:100%;margin:0;padding:0;overflow:hidden;background:transparent}
+#fd{
+  --blue:#0068B1;--red:#c62828;--red-dk:#8e1b1b;--red-lt:#fdecec;--red-bd:#f0b9b9;
+  --bg:#fff;--border:#e2e5e8;--text:#1a1a1a;--muted:#6b7280;--font:'Merriweather Sans',sans-serif;
+  font-family:var(--font);color:var(--text);background:var(--bg);width:100%;height:100%;overflow:hidden;
+  display:grid;grid-template-columns:100%;grid-template-rows:auto auto minmax(0,1fr) 118px;grid-template-areas:"head" "search" "map" "list"}
+/* bandeau */
+#fd .head{grid-area:head;padding:9px 14px 8px;border-top:3px solid var(--red);border-bottom:1px solid var(--border);min-width:0}
+#fd .kick{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#fff;background:var(--red);padding:2px 7px;border-radius:2px}
+#fd h1{margin:5px 0 0;font-size:17px;font-weight:800;line-height:1.15;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#fd .sub{font-size:10px;color:var(--muted);margin-top:3px;font-weight:300;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#fd .sub:empty{display:none}
+#fd .search{grid-area:search;padding:7px 14px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;justify-content:center;gap:6px;min-width:0}
+#fd .srow{display:flex;align-items:center;gap:8px}
+#fd input{flex:1;min-width:0;font:400 13px var(--font);color:var(--text);border:1px solid var(--border);border-radius:2px;padding:7px 9px;background:#fff;outline:none;-webkit-appearance:none;appearance:none}
+#fd input:focus{border-color:var(--red)}
+#fd .count{font-size:10px;font-weight:700;color:var(--red);white-space:nowrap;background:var(--red-lt);border:1px solid var(--red-bd);border-radius:2px;padding:5px 8px}
+#fd .chips{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none}
+#fd .chips::-webkit-scrollbar{display:none}
+#fd .chip{flex:0 0 auto;font:700 10px var(--font);color:var(--muted);background:#fff;border:1px solid var(--border);border-radius:2px;padding:4px 8px;cursor:pointer}
+#fd .chip:hover{border-color:var(--red);color:var(--red)}
+#fd .chip.on{background:var(--red);border-color:var(--red);color:#fff}
+/* carte : fond désaturé pour faire ressortir les repères rouges */
+#fd #map{grid-area:map;min-height:0;min-width:0;width:100%;height:100%;background:#eef0f2;outline:none;z-index:0;position:relative}
+#fd .leaflet-tile-pane{filter:grayscale(1) contrast(1.05) brightness(1.04)}
+/* fil des faits — mobile : carrousel de brèves */
+#fd #list{grid-area:list;position:relative;min-width:0;min-height:0;display:flex;flex-direction:row;gap:8px;padding:9px 12px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;border-top:1px solid var(--border);background:#f3f5f7}
+#fd .card{position:relative;flex:0 0 82%;max-width:290px;height:100%;display:flex;gap:10px;padding:7px;background:#fff;border:1px solid var(--border);border-top:3px solid var(--red);border-radius:2px;cursor:pointer;scroll-snap-align:start;min-width:0}
+#fd .card.on{background:var(--red-lt);border-color:var(--red-bd);border-top-color:var(--red-dk)}
+#fd .thumb{flex:0 0 76px;height:100%;background:#dfe6ee center/cover no-repeat;border-radius:2px;filter:grayscale(.15)}
+#fd .num{position:absolute;top:7px;left:7px;min-width:20px;height:20px;padding:0 5px;background:var(--red);color:#fff;font:700 10px/20px var(--font);text-align:center;border-radius:2px 0 2px 0;z-index:1}
+#fd .info{min-width:0;display:flex;flex-direction:column;justify-content:center;gap:3px}
+#fd .dt{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--red);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#fd .dt .wd,#fd .dt .k,#fd .res,#fd .lnk{display:none}
+#fd .name{font-size:13px;font-weight:800;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#fd .addr{font-size:9.5px;font-weight:300;color:var(--muted);line-height:1.35;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+#fd .addr::before{content:"";display:inline-block;width:7px;height:9px;margin-right:4px;vertical-align:-1px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 32'%3E%3Cpath fill='%23c62828' d='M12 0C5.4 0 0 5.4 0 12c0 9 12 20 12 20s12-11 12-20C24 5.4 18.6 0 12 0zm0 17a5 5 0 110-10 5 5 0 010 10z'/%3E%3C/svg%3E") center/contain no-repeat}
+#fd .empty{align-self:center;width:100%;text-align:center;font-size:12px;color:var(--muted)}
+/* repères numérotés */
+.pin{position:relative;width:26px;height:26px;border-radius:50%;background:#c62828;color:#fff;font:700 11px/22px 'Merriweather Sans',sans-serif;text-align:center;border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.35),0 0 0 4px rgba(198,40,40,.22);transition:transform .15s}
+.pin.on{transform:scale(1.3);background:#8e1b1b;box-shadow:0 1px 8px rgba(0,0,0,.4),0 0 0 6px rgba(198,40,40,.3)}
+.pin.on::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid #c62828;animation:pp 1.8s ease-out infinite;pointer-events:none}
+@keyframes pp{from{transform:scale(.8);opacity:.9}to{transform:scale(1.8);opacity:0}}
+@media (prefers-reduced-motion:reduce){.pin.on::after{animation:none;opacity:0}}
+/* popup */
+.leaflet-popup-content-wrapper{border-radius:2px!important;box-shadow:0 4px 24px rgba(0,0,0,.13)!important;padding:0!important;overflow:hidden;font-family:'Merriweather Sans',sans-serif!important;border:1px solid #e2e5e8!important;border-top:3px solid #c62828!important}
+.leaflet-popup-content{margin:0!important;width:240px!important}
+.leaflet-popup-tip-container{display:none}
+.leaflet-popup{margin-bottom:14px}
+.pop-img{width:100%;aspect-ratio:16/9;background:#dfe6ee center/cover no-repeat}
+.pop-b{padding:9px 12px 11px;background:#fff;max-height:210px;overflow-y:auto}
+.pop-b .t{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+.pop-b .d{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#c62828}
+.pop-b .k{font-size:9px;font-weight:700;color:#8e1b1b;background:#fdecec;border:1px solid #f0b9b9;border-radius:2px;padding:1px 6px}
+.pop-b .n{font-size:13px;font-weight:800;color:#1a1a1a;line-height:1.25}
+.pop-b .a{font-size:9.5px;color:#6b7280;margin-top:2px;font-weight:300}
+.pop-b .r{font-size:11px;color:#333;line-height:1.5;margin-top:6px;font-weight:400}
+.pop-b a{display:inline-block;margin-top:8px;font-size:10px;font-weight:700;color:#fff;background:#c62828;border-radius:2px;padding:5px 10px;text-decoration:none}
+.pop-b a:hover{background:#8e1b1b}
+.leaflet-container a.leaflet-popup-close-button{color:#fff;text-shadow:0 0 4px rgba(0,0,0,.7);top:4px;right:4px}
+.leaflet-container{font-family:'Merriweather Sans',sans-serif}
+/* bureau : bandeau pleine largeur, chronologie à gauche, carte à droite */
+@media (min-width:900px){
+  #fd{grid-template-columns:400px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);grid-template-areas:"head search" "list map"}
+  #fd .head{padding:14px 18px 12px;border-top-width:4px}
+  #fd .search{border-top:4px solid var(--red);border-left:1px solid var(--border);padding:12px 18px}
+  #fd .search .srow{max-width:460px}
+  #fd .kick{font-size:10px}
+  #fd h1{font-size:23px;margin-top:7px;white-space:normal}#fd .sub{white-space:normal;font-size:11px}
+  #fd .chips{flex-wrap:wrap}
+  #fd #list{display:block;overflow-x:hidden;overflow-y:auto;scroll-snap-type:none;border-top:0;border-right:1px solid var(--border);background:#fff;padding:8px 10px 28px 8px}
+  #fd .card{display:grid;grid-template-columns:30px minmax(0,1fr);column-gap:12px;align-content:start;flex:none;max-width:none;height:auto;padding:14px 12px 22px 8px;border:0;border-radius:2px;background:none;scroll-snap-align:none}
+  #fd .card:hover{background:#fafbfc}
+  #fd .card.on{background:var(--red-lt)}
+  #fd .card::before{content:"";position:absolute;left:22px;top:0;bottom:0;width:2px;background:var(--border)}
+  #fd .card.first::before{top:29px}
+  #fd .card.last::before{bottom:calc(100% - 29px)}
+  #fd .info{display:contents}
+  #fd .num{position:relative;grid-column:1;grid-row:1;width:30px;height:30px;min-width:0;padding:0;border-radius:50%;font:700 12px/24px var(--font);border:3px solid var(--ring,#fff);box-shadow:0 0 0 1px var(--red)}
+  #fd .card.on{--ring:var(--red-lt)}
+  #fd .card.on .num{background:var(--red-dk);box-shadow:0 0 0 1px var(--red-dk)}
+  #fd .dt,#fd .name,#fd .addr,#fd .thumb,#fd .res,#fd .lnk{grid-column:2}
+  #fd .dt{order:1;font-size:10px;margin-top:2px}
+  #fd .dt .wd,#fd .dt .k{display:inline}
+  #fd .dt .k{margin-left:6px;font-size:9px;color:var(--red-dk);background:var(--red-lt);border:1px solid var(--red-bd);border-radius:2px;padding:1px 6px;text-transform:none;letter-spacing:0}
+  #fd .name{order:2;font-size:17px;line-height:1.2;-webkit-line-clamp:unset;display:block;margin-top:5px}
+  #fd .addr{order:3;font-size:11px;margin-top:4px;-webkit-line-clamp:unset;display:block}
+  #fd .addr::before{width:8px;height:10px}
+  #fd .thumb{order:4;flex:none;height:auto;aspect-ratio:16/9;margin-top:10px}
+  #fd .res{order:5;display:block;font-size:12.5px;line-height:1.6;font-weight:400;color:#333;margin-top:10px}
+  #fd .lnk{order:6;display:inline-block;justify-self:start;margin-top:10px;font-size:11px;font-weight:700;color:var(--red);text-decoration:none;border-bottom:2px solid var(--red-bd)}
+  #fd .lnk:hover{color:var(--red-dk);border-color:var(--red-dk)}
+  .leaflet-popup-content{width:210px!important}
+  .pop-img,.pop-b .r,.pop-b a{display:none}
+}
+@media (max-width:440px){
+  .leaflet-popup-content{width:200px!important}
+  #fd{grid-template-rows:auto auto minmax(0,1fr) 108px}
+  #fd .head{padding:8px 12px 6px}#fd h1{font-size:15px}
+  #fd .search{padding:6px 12px}#fd .card{flex-basis:86%}#fd .thumb{flex-basis:64px}
+}
+@media (max-height:420px) and (max-width:899px){#fd{grid-template-rows:auto auto minmax(0,1fr) 88px}#fd .head .kick,#fd .sub{display:none}}
+</style>
+</head>
+<body>
+<div id="fd">
+  <div class="head">
+    <div class="kick" id="kick"></div>
+    <h1 id="title"></h1>
+    <div class="sub" id="sub"></div>
+  </div>
+  <div class="search">
+    <div class="srow"><input id="q" type="search" placeholder="Rechercher un fait, une date, un lieu…" aria-label="Rechercher" autocomplete="off"><span class="count" id="count"></span></div>
+    <div class="chips" id="chips"></div>
+  </div>
+  <div id="map"></div>
+  <div id="list"></div>
+</div>
+
+<!-- DONNÉES : modifiées automatiquement par l'éditeur -->
+<script id="fdl-data" type="application/json">
+{"title":"La carte des faits jugés","subtitle":"","kicker":"Grand procès de la Duchère","items":[
+{"nom":"La première fusillade","date":"2022-02-13","type":"","groupe":"proces","adresse":"576 av. de la Sauvegarde","resume":"Vers 21h25, des tirs de kalachnikov visent C. qui réussit à s’abriter dans un buisson. Il est indemne.","lien":"","image":"https://raw.githubusercontent.com/lucasbe-lpr/grand-proces-de-la-duchere/main/img/1.jpg","lat":45.78902,"lng":4.78983},
+{"nom":"Cinq mineurs blessés","date":"2022-03-19","type":"","groupe":"proces","adresse":"315-317 av. André-Sakharov","resume":"Vers 21 h, le frère de C. fait partie des cinq adolescents, âgés de 15 à 17 ans, qui sont blessés par des coups de feu.","lien":"https://c.leprogres.fr/faits-divers-justice/2022/03/19/des-coups-de-feu-tires-a-la-duchere-quatre-mineurs-blesses-dont-un-par-balle","image":"https://raw.githubusercontent.com/lucasbe-lpr/grand-proces-de-la-duchere/main/img/2.jpg","lat":45.78710365466642,"lng":4.8001684295817215},
+{"nom":"Barbecue ensanglanté","date":"2022-05-01","type":"","groupe":"proces","adresse":"Square Averroès","resume":"Un individu surgit vers 3h avec un fusil d’assaut et fait feu à plusieurs reprises. Quatre hommes sont blessés, dont trois grièvement.","lien":"https://c.leprogres.fr/faits-divers-justice/2022/05/01/rafales-de-coups-de-feu-a-la-duchere-le-barbecue-se-termine-dans-le-sang","image":"https://raw.githubusercontent.com/lucasbe-lpr/grand-proces-de-la-duchere/main/img/3.jpg","lat":45.787321492525194,"lng":4.794261076910256},
+{"nom":"Le double meurtre","date":"2022-06-14","type":"","groupe":"proces","adresse":"319-315 av.André-Sakharov","resume":"Une fusillade éclate vers 23h40. La police découvre le corps de deux hommes tués par balles, dont l’un est encore mineur.","lien":"https://c.leprogres.fr/faits-divers-justice/2022/06/15/des-tirs-en-rafale-a-la-fuite-comment-le-double-meurtre-de-la-duchere-s-est-deroule","image":"https://raw.githubusercontent.com/lucasbe-lpr/grand-proces-de-la-duchere/main/img/4.jpg","lat":45.786876604797804,"lng":4.799973934510366},
+{"nom":"Incendie criminel","date":"2022-08-29","type":"","groupe":"proces","adresse":"32 av. des Sources","resume":"Dans la nuit, le domicile familial de C. est la cible d’un incendie criminel.","lien":"","image":"https://raw.githubusercontent.com/lucasbe-lpr/grand-proces-de-la-duchere/main/img/5.JPG","lat":45.79136725667169,"lng":4.784515868623001},
+{"nom":"La grenade défectueuse","date":"2022-08-29","type":"","groupe":"proces","adresse":"312 av. André-Sakharov","resume":"La même nuit, une grenade — qui n'explose pas — est jetée dans l’appartement de ses parents.","lien":"","image":"https://raw.githubusercontent.com/lucasbe-lpr/grand-proces-de-la-duchere/main/img/6.JPG","lat":45.78755823366491,"lng":4.800527772570025},
+{"nom":"Tentative de meurtre","date":"2022-10-11","type":"","groupe":"proces","adresse":"Quai Raoul-Carrié","resume":"Une fusillade se prépare mais la police déploie un dispositif de surveillance et intercepte deux suspects avant qu’ils passent à l’action.","lien":"https://c.leprogres.fr/faits-divers-justice/2022/10/15/fusillades-de-la-duchere-les-suspects-toujours-en-garde-a-vue","image":"https://raw.githubusercontent.com/lucasbe-lpr/grand-proces-de-la-duchere/main/img/7.JPG","lat":45.7988386008819,"lng":4.832894659384469}]}
+</script>
+
+<script>
+(function(){
+var D=JSON.parse(document.getElementById('fdl-data').textContent);
+var items=(D.items||[]).filter(function(i){return isFinite(i.lat)&&isFinite(i.lng)})
+  .sort(function(a,b){return String(a.date||'9999').localeCompare(String(b.date||'9999'))});
+var $=function(i){return document.getElementById(i)};
+$('title').textContent=D.title||'La carte des faits';$('sub').textContent=D.subtitle||'';$('kick').textContent=D.kicker||'';
+$('kick').style.display=D.kicker?'':'none';document.title=D.title||document.title;
+
+function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+function pd(s){if(!s)return null;var d=new Date(s+'T12:00:00');return isNaN(d)?null:d}
+function fdate(s){var d=pd(s);return d?d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}):(s||'')}
+function dateEl(it){
+  var e=el('div','dt'),d=pd(it.date);
+  if(d){e.appendChild(el('span','wd',d.toLocaleDateString('fr-FR',{weekday:'long'})+' '));e.appendChild(el('span',null,d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})))}
+  else if(it.date)e.textContent=it.date;
+  if(it.type)e.appendChild(el('span','k',it.type));
+  return e}
+function ph(){var s='<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="#e9ecef"/><circle cx="200" cy="150" r="34" fill="#c62828" fill-opacity=".85"/></svg>';return 'url("data:image/svg+xml,'+encodeURIComponent(s)+'")'}
+function img(it){return it.image?'url("'+String(it.image).replace(/"/g,'%22')+'")':ph()}
+function safe(u){return /^https?:\/\//i.test(u||'')?u:''}
+
+var map=L.map('map',{zoomControl:false}).setView([45.7875,4.80],15);
+L.control.zoom({position:'topright'}).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
+
+var markers=[],cards=[],active=-1,list=$('list'),cat='',q=$('q');
+items.forEach(function(it,i){
+  var m=L.marker([it.lat,it.lng],{icon:L.divIcon({className:'',html:'<div class="pin">'+(i+1)+'</div>',iconSize:[26,26],iconAnchor:[13,13],popupAnchor:[0,-14]}),title:it.nom}).addTo(map);
+  var pop=el('div'),pb=el('div','pop-b'),t=el('div','t');
+  if(it.image){var pi=el('div','pop-img');pi.style.backgroundImage=img(it);pop.appendChild(pi)}
+  if(it.date)t.appendChild(el('span','d',fdate(it.date)));
+  if(it.type)t.appendChild(el('span','k',it.type));
+  pb.appendChild(t);pb.appendChild(el('div','n',it.nom));
+  if(it.adresse)pb.appendChild(el('div','a',it.adresse));
+  if(it.resume)pb.appendChild(el('div','r',it.resume));
+  if(safe(it.lien)){var a=el('a',null,'Lire l’article →');a.href=it.lien;a.target='_blank';a.rel='noopener';pb.appendChild(a)}
+  pop.appendChild(pb);
+  m.bindPopup(pop,{autoPanPadding:[20,20],maxWidth:240});
+  m.on('click',function(){select(i,false)});
+  markers.push(m);
+
+  var c=el('div','card'),th=el('div','thumb'),inf=el('div','info');
+  th.style.backgroundImage=img(it);
+  inf.appendChild(dateEl(it));inf.appendChild(el('div','name',it.nom));
+  if(it.adresse)inf.appendChild(el('div','addr',it.adresse));
+  if(it.resume)inf.appendChild(el('div','res',it.resume));
+  if(safe(it.lien)){var l=el('a','lnk','Lire l’article →');l.href=it.lien;l.target='_blank';l.rel='noopener';inf.appendChild(l)}
+  c.appendChild(el('span','num',i+1));c.appendChild(th);c.appendChild(inf);c.onclick=function(){select(i,true)};
+  list.appendChild(c);cards.push(c);
+});
+var empty=el('div','empty','Aucun fait ne correspond.');empty.hidden=true;list.appendChild(empty);
+
+function scrollToCard(c){
+  if(getComputedStyle(list).flexDirection==='row'&&list.scrollWidth>list.clientWidth+2)list.scrollTo({left:c.offsetLeft-12,behavior:'smooth'});
+  else list.scrollTo({top:c.offsetTop-6,behavior:'smooth'});
+}
+function select(i,fly){
+  if(active>-1){markers[active].getElement().firstChild.classList.remove('on');cards[active].classList.remove('on')}
+  active=i;markers[i].getElement().firstChild.classList.add('on');cards[i].classList.add('on');scrollToCard(cards[i]);
+  if(fly){map.setView(markers[i].getLatLng(),Math.max(map.getZoom(),16),{animate:true});markers[i].openPopup()}
+}
+
+// filtres par type de fait
+var types=[];items.forEach(function(it){if(it.type&&types.indexOf(it.type)<0)types.push(it.type)});
+var chips=$('chips');
+if(types.length>1)['Tous'].concat(types).forEach(function(t){
+  var b=el('button','chip'+(t==='Tous'?' on':''),t);b.onclick=function(){cat=t==='Tous'?'':t;[].forEach.call(chips.children,function(x){x.classList.toggle('on',x===b)});filter()};chips.appendChild(b)});
+else chips.style.display='none';
+
+function norm(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}
+function fit(p){if(p.length)map.fitBounds(L.latLngBounds(p),{padding:[50,50],maxZoom:16})}
+function filter(){
+  var t=norm(q.value),n=0,pts=[],vis=[];
+  items.forEach(function(it,i){
+    var ok=(!cat||it.type===cat)&&(!t||norm([it.nom,it.adresse,it.type,it.resume,fdate(it.date)].join(' ')).indexOf(t)>-1);
+    cards[i].style.display=ok?'':'none';cards[i].classList.remove('first','last');
+    if(ok){markers[i].addTo(map);n++;pts.push(markers[i].getLatLng());vis.push(cards[i])}else map.removeLayer(markers[i]);
+  });
+  if(vis.length){vis[0].classList.add('first');vis[vis.length-1].classList.add('last')}
+  empty.hidden=n>0;$('count').textContent=n+' fait'+(n>1?'s':'');fit(pts);
+}
+q.addEventListener('input',filter);filter();
+setTimeout(function(){map.invalidateSize();filter()},300);
+window.addEventListener('resize',function(){clearTimeout(window._t);window._t=setTimeout(function(){map.invalidateSize()},200)});
+})();
+</script>
+</body>
+</html>
